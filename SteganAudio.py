@@ -3,6 +3,11 @@ from sys import platform,stdin
 import wave
 from colorama import init
 from termcolor import colored
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+import base64
 
 
 init()
@@ -13,6 +18,31 @@ def clearTerminal():
         os.system('cls')
     else:
         os.system('clear')
+
+
+def generate_key_from_string(input_string, salt=b'salt'):
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        iterations=100000,  # You can adjust the number of iterations based on your security requirements
+        salt=salt,
+        length=32  # The desired key length in bytes (256 bits)
+    )
+
+    key = base64.urlsafe_b64encode(kdf.derive(input_string.encode()))
+    return key
+
+
+def encrypt_message(message, key):
+    key = generate_key_from_string(key)
+    cipher = Fernet(key)
+    encrypted_message = cipher.encrypt(message.encode())
+    return encrypted_message.decode()
+
+def decrypt_message(encrypted_message, key):
+    key = generate_key_from_string(key)
+    cipher = Fernet(key)
+    decrypted_message = cipher.decrypt(encrypted_message.encode()).decode()
+    return decrypted_message
 
 
 def embed_into_audio(input_audio,message,output_audio):
@@ -43,7 +73,7 @@ def extract_from_audio(input_audio):
         message += char
         if char == '\0':
             break
-    print(colored("\n[SUCCESS]","green"),"Your embedded message is as follows:\n\n{}\n".format(message))
+    return message
 
 
 def bits_to_bytes(bits):
@@ -71,6 +101,7 @@ def multiLineInput():
 
 
 if __name__=="__main__":
+    key = input('\n[INPUT] Provide key: ')
     print(colored("[CHOICE]","yellow"),"What would you like to do?\n   [1] Embed Message into an Audio File\n   [2] Extract Message from Audio File")
     choice = int(input("Selection > "))
     if choice == 1:
@@ -82,11 +113,16 @@ if __name__=="__main__":
             message = multiLineInput()
         else:
             print(colored("\n[ERROR]","red"),"{} is not a valid option".format(typechoice))
+        message = encrypt_message(message, key)
+        print(colored('\n[SUCCESS]'), f'Encrypted message is\n\n{message}')
         outputfile = input("\n[INPUT] Complete Location for Output Audio File: ").replace('"','')
         embed_into_audio(audiofile,message,outputfile)
     elif choice == 2:
         audiofile = input("\n[INPUT] Complete Location of Input Audio File: ").replace('"','')
-        extract_from_audio(audiofile)
+        message = extract_from_audio(audiofile)
+        print(colored('\n[SUCCESS]'), f'Encrypted message is\n\n{message}')
+        message = decrypt_message(message, key)
+        print(colored("\n[SUCCESS]","green"),"Your embedded message is as follows:\n\n{}\n".format(message))
     elif choice == 99:
         print(" Exit code received, Thank you for using SteganAudio!\n")
     else:
